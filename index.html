@@ -3,86 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>~sharkthewaters — eat. grow. survive.</title>
-  <meta name="description" content="~sharkthewaters — pilot the chumthewaters ASCII shark through a 3D deep. Eat fish to grow, dodge the hooks and bigger fish. You're gonna need a bigger boat.">
+  <title>~sharkthewaters — 3D space rocket ball shark</title>
+  <meta name="description" content="Fly the chumthewaters ASCII shark through a 3D space arena and rocket-boost a ball into the goal. Shark soccer vs a bot.">
   <meta name="color-scheme" content="dark">
-  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 
-  <!-- three.js (r169) vendored locally as an ES module — no build step, no runtime
-       CDN dependency. The whole folder drops onto any static host, like ../chumthewaters.
-       To use a CDN instead, swap the path for:
-       https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js -->
+  <!-- three.js as a vendored ES module (no CDN, works offline) — must be served over http -->
   <script type="importmap">
-  {
-    "imports": {
-      "three": "./vendor/three.module.js"
+  { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
+
+  <!-- surface any boot/load failure into the start panel instead of a silently dead screen -->
+  <script>
+    function __sharkErr(msg) {
+      var b = document.getElementById("bootError");
+      if (b) { b.textContent = "⚠ " + msg + "  (tip: serve this over http, not file://)"; b.classList.remove("hidden"); }
     }
-  }
+    window.addEventListener("error", function (e) { __sharkErr((e.error && e.error.message) || e.message || "script error"); });
+    window.addEventListener("unhandledrejection", function (e) { __sharkErr((e.reason && e.reason.message) || "module failed to load"); });
   </script>
 </head>
 <body>
-  <!-- the 3D ocean renders into here -->
   <div id="scene"></div>
 
-  <!-- HUD: score / high score / size meter, shown while playing -->
+  <!-- HUD -->
   <div id="hud" class="hidden" aria-hidden="true">
-    <div class="hud-left">
-      <div class="hud-row"><span class="lbl">SCORE</span><span id="score">0</span></div>
-      <div class="hud-row"><span class="lbl">BEST</span><span id="best">0</span></div>
-    </div>
-    <div class="hud-right">
-      <div class="hud-row"><span class="lbl">SIZE</span></div>
-      <div id="sizebar"><div id="sizefill"></div></div>
-    </div>
+    <div class="hud-score"><span id="youScore">0</span><span class="vs">YOU&nbsp;&middot;&nbsp;BOT</span><span id="botScore">0</span></div>
+    <div id="clock">2:00</div>
+    <div class="hud-boost"><span class="lbl">BOOST</span><div id="boostBar"><div id="boostFill"></div></div></div>
+    <div class="hud-hint">C &middot; ball-cam</div>
   </div>
 
-  <!-- depth / danger flash overlay -->
-  <div id="flash"></div>
+  <!-- goal / event banner -->
+  <div id="goalBanner" class="hidden"><span id="goalText">GOAL!</span></div>
 
-  <!-- START screen -->
+  <!-- START -->
   <div id="start" class="overlay">
     <div class="panel">
-      <pre class="logo">      ███████╗██╗  ██╗ █████╗ ██████╗ ██╗  ██╗
-      ██╔════╝██║  ██║██╔══██╗██╔══██╗██║ ██╔╝
-      ███████╗███████║███████║██████╔╝█████╔╝
-      ╚════██║██╔══██║██╔══██║██╔══██╗██╔═██╗
-      ███████║██║  ██║██║  ██║██║  ██║██║  ██╗
-      ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
-        ████████╗██╗  ██╗███████╗
-        ╚══██╔══╝██║  ██║██╔════╝   ██╗    ██╗ █████╗ ████████╗███████╗██████╗ ███████╗
-           ██║   ███████║█████╗     ██║ █╗ ██║██╔══██╗   ██║   ██╔════╝██╔══██╗██╔════╝
-           ██║   ██╔══██║██╔══╝     ██║███╗██║███████║   ██║   █████╗  ██████╔╝███████╗
-           ██║   ██║  ██║███████╗   ╚███╔███╔╝██║  ██║   ██║   ███████╗██║  ██║███████║
-           ╚═╝   ╚═╝  ╚═╝╚══════╝    ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝</pre>
-      <p class="tag">You're gonna need a bigger boat.</p>
+      <div class="title">SHARK<span class="ball">&#9679;</span>SOCCER</div>
+      <div class="subtitle">3D &middot; SPACE &middot; ROCKET &middot; BALL &middot; SHARK</div>
       <div class="how">
-        <p><b>Steer</b> with the mouse — the shark chases your cursor.&nbsp; <b>WASD / arrows</b> also work.</p>
-        <p><b>Dash</b> with click or <b>space</b>.</p>
-        <p>Eat fish <b>smaller</b> than you to <b>grow + score</b>. Anything <b>bigger</b> eats you. Dodge the <b>hooks</b>.</p>
+        <p><b>Move the mouse</b> to fly &mdash; full 3D: left/right banks, up/down climbs &amp; dives.</p>
+        <p><b>Hold click / Space / Shift</b> to <b class="cyan">ROCKET BOOST</b>.</p>
+        <p>Smash the <b class="gold">ball</b> into the <b class="cyan">cyan goal</b>; defend your <b class="red">red goal</b> from the bot shark.</p>
+        <p class="dim"><b>C</b> toggles ball-cam.</p>
       </div>
-      <button id="startBtn" class="btn">DIVE IN ▸</button>
-      <p class="hiscore">best: <span id="startBest">0</span></p>
+      <button id="startBtn" class="btn">LAUNCH &#9656;</button>
+      <p id="bootError" class="boot-error hidden"></p>
+      <p class="credit-inline">ASCII shark adapted from &ldquo;Ascii Shark&rdquo; by Kitty (meowinglion) &middot; Wallpaper Engine #3606705311</p>
     </div>
   </div>
 
-  <!-- GAME OVER screen -->
+  <!-- GAME OVER -->
   <div id="over" class="overlay hidden">
     <div class="panel">
-      <pre class="logo small" id="overTitle">CAUGHT.</pre>
-      <p class="tag" id="overReason">A bigger fish got you.</p>
-      <div class="scores">
-        <div class="bigscore"><span class="lbl">SCORE</span><span id="finalScore">0</span></div>
-        <div class="bigscore"><span class="lbl">BEST</span><span id="finalBest">0</span></div>
-      </div>
-      <p id="newbest" class="newbest hidden">★ NEW BEST ★</p>
-      <button id="againBtn" class="btn">SWIM AGAIN ▸</button>
+      <div id="overTitle" class="title small">MATCH OVER</div>
+      <div class="finalscore"><span id="finalYou">0</span><span class="dash">&ndash;</span><span id="finalBot">0</span></div>
+      <p id="overMsg" class="subtitle">Good game.</p>
+      <button id="againBtn" class="btn">REMATCH &#9656;</button>
     </div>
   </div>
 
-  <p class="credit">ASCII shark adapted from “Ascii Shark” by Kitty (meowinglion) · Wallpaper Engine #3606705311</p>
-
-  <!-- Shark ASCII frames: window.SHARK_DATA = { box, angles[12], frames{ heading: [16 swim frames] } } -->
   <script src="shark-frames.js"></script>
   <script type="module" src="game.js"></script>
 </body>
