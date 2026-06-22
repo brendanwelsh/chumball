@@ -44,8 +44,8 @@ Three.js is vendored as an ES module (no CDN, no build step), so it **must be se
 ES modules are blocked on `file://`. From this folder:
 
 ```sh
-python -m http.server
-# then open http://localhost:8000/
+python -m http.server 8009
+# then open http://localhost:8009/   (any free port works; :8000 is often taken)
 ```
 
 The start screen surfaces any boot/load error (with a "serve over http" tip) instead of a blank canvas.

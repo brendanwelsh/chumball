@@ -15,8 +15,8 @@ import * as THREE from "three";
 /* ============================================================ CONFIG (the one place to tune FEEL) */
 const CFG = {
   /* arena (half-extents; long along Z, goals at ±Z) — roomy so play isn't cramped */
-  AX: 185, AY: 112, AZ: 300,
-  goalW: 62, goalH: 44,            // goal-mouth half width/height (rectangular, RL-style)
+  AX: 235, AY: 120, AZ: 390,       // bigger, flatter, more RL-proportioned arena (half-extents)
+  goalW: 66, goalH: 46,            // goal-mouth half width/height (rectangular, RL-style)
 
   /* shark */
   sharkLen: 22, sharkHitR: 13,
@@ -56,11 +56,13 @@ const CFG = {
   autoCruise: 0.6,                 // mouse/kb auto-throttle when no W/S held (keeps mouse players moving)
 
   /* camera */
-  camBack: 60, camUp: 22, lookAhead: 64, camStiff: 9, fov: 66, fovBoost: 76,
+  camBack: 66, camUp: 26, lookAhead: 80, camStiff: 9, fov: 74, fovBoost: 84,
 
-  /* ball physics — slower so it doesn't rocket straight into the net */
-  ballR: 15, ballDrag: 0.38, restit: 0.9, ballMax: 200,
-  hitBase: 105, hitTransfer: 0.85,
+  /* ball physics — Rocket-League-style: gravity, ground bounce + roll */
+  ballR: 18, ballDrag: 0.30, restit: 0.72, ballMax: 210,
+  gravity: 168,                    // downward accel (units/s^2) — ball falls/arcs/bounces
+  ballGroundFriction: 0.55,        // rolling resistance while on the floor
+  hitBase: 108, hitTransfer: 0.9,
 
   /* bot AI (leads the ball, defends + clears + charges) — paced to the slower game */
   botSpeed: 92, botBoostSpeed: 156, botAccel: 3.3,
@@ -166,7 +168,7 @@ function boot() {
 
 /* ============================================================ WORLD BUILDERS */
 function buildStars() {
-  const N = 2800, pos = new Float32Array(N * 3);
+  const N = 1300, pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     const r = 1700 + Math.random() * 2000;
     const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
@@ -180,7 +182,7 @@ function buildStars() {
 }
 
 function buildDust() {
-  const N = 1000, pos = new Float32Array(N * 3);
+  const N = 240, pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     pos[i * 3] = (Math.random() * 2 - 1) * CFG.AX;
     pos[i * 3 + 1] = (Math.random() * 2 - 1) * CFG.AY;
@@ -193,33 +195,95 @@ function buildDust() {
 
 function buildArena() {
   const { AX, AY, AZ } = CFG;
-  const box = new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.BoxGeometry(AX * 2, AY * 2, AZ * 2)),
-    new THREE.LineBasicMaterial({ color: 0x1f6f8f, transparent: true, opacity: 0.55 })
-  );
-  scene.add(box);
+  const r = Math.min(AX, AZ) * 0.30;            // big RL-style rounded corners
 
-  // faint translucent boundary walls (top/bottom/left/right) so ball bounces read as hitting a surface
-  const wallMat = new THREE.MeshBasicMaterial({ color: 0x1f6f8f, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false });
-  const wall = (w, h, x, y, z, rx, ry) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
-    m.position.set(x, y, z); m.rotation.set(rx || 0, ry || 0, 0); scene.add(m);
+  // a rounded-rectangle FILL shape (arena footprint), in the X/Z plane
+  const roundedShape = (hx, hz, rad) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-hx + rad, -hz);
+    sh.lineTo(hx - rad, -hz);  sh.quadraticCurveTo(hx, -hz, hx, -hz + rad);
+    sh.lineTo(hx, hz - rad);   sh.quadraticCurveTo(hx, hz, hx - rad, hz);
+    sh.lineTo(-hx + rad, hz);  sh.quadraticCurveTo(-hx, hz, -hx, hz - rad);
+    sh.lineTo(-hx, -hz + rad); sh.quadraticCurveTo(-hx, -hz, -hx + rad, -hz);
+    return sh;
   };
-  wall(AX * 2, AZ * 2, 0, AY, 0, Math.PI / 2, 0);    // top
-  wall(AX * 2, AZ * 2, 0, -AY, 0, Math.PI / 2, 0);   // bottom
-  wall(AZ * 2, AY * 2, AX, 0, 0, 0, Math.PI / 2);    // right (+X)
-  wall(AZ * 2, AY * 2, -AX, 0, 0, 0, Math.PI / 2);   // left (-X)
+  // a rounded-rectangle OUTLINE as (x,z) points for wireframe loops / struts
+  const roundedOutline = (hx, hz, rad, seg = 6) => {
+    const pts = [], corners = [
+      [hx - rad, hz - rad, 0], [-hx + rad, hz - rad, Math.PI / 2],
+      [-hx + rad, -hz + rad, Math.PI], [hx - rad, -hz + rad, -Math.PI / 2],
+    ];
+    for (const [cx, cz, a0] of corners)
+      for (let i = 0; i <= seg; i++) {
+        const a = a0 + (i / seg) * (Math.PI / 2);
+        pts.push(new THREE.Vector2(cx + Math.cos(a) * rad, cz + Math.sin(a) * rad));
+      }
+    return pts;
+  };
+  const flatShape = (hx, hz, rad, y, mat) => {
+    const g = new THREE.ShapeGeometry(roundedShape(hx, hz, rad)); g.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(g, mat); m.position.y = y; scene.add(m); return m;
+  };
 
-  for (const z of [-AZ, AZ]) {
-    const grid = new THREE.GridHelper(AY * 2.6, 18, 0x274b63, 0x16323f);
-    grid.rotation.x = Math.PI / 2; grid.position.set(0, 0, z);
-    grid.material.transparent = true; grid.material.opacity = 0.32;
-    scene.add(grid);
+  // --- the GROUND: a solid rounded pitch the ball rests/rolls/bounces on (clearly reads as the floor) ---
+  flatShape(AX, AZ, r, -AY, new THREE.MeshStandardMaterial({
+    color: 0x0a1c33, emissive: 0x06162b, emissiveIntensity: 0.55, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide,
+  }));
+  const grid = new THREE.GridHelper(AZ * 2, 30, 0x3f86c0, 0x16384a);
+  grid.scale.x = AX / AZ; grid.position.y = -AY + 0.4;
+  grid.material.transparent = true; grid.material.opacity = 0.26; scene.add(grid);
+
+  // --- the ROOF: matching rounded ceiling so the arena reads as an enclosed box (ball bounces off it) ---
+  flatShape(AX, AZ, r, AY, new THREE.MeshStandardMaterial({
+    color: 0x0a1626, emissive: 0x0a1830, emissiveIntensity: 0.22, roughness: 1.0,
+    transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false,
+  }));
+
+  // --- rounded "cage": floor + roof outline loops joined by vertical struts (sells the rounded edges) ---
+  const outline = roundedOutline(AX, AZ, r, 6);
+  const loop = (y, mat) => scene.add(new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(outline.map((p) => new THREE.Vector3(p.x, y, p.y))), mat));
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x2f7fa8, transparent: true, opacity: 0.6 });
+  loop(-AY, edgeMat); loop(AY, edgeMat);
+  const strutMat = new THREE.LineBasicMaterial({ color: 0x2f7fa8, transparent: true, opacity: 0.3 });
+  for (let i = 0; i < outline.length; i += 2) {
+    const p = outline[i];
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+      [new THREE.Vector3(p.x, -AY, p.y), new THREE.Vector3(p.x, AY, p.y)]), strutMat));
   }
 
-  // goals: ORANGE at +Z (enemy goal — you attack), BLUE at -Z (your goal — you defend)
-  addGoal(AZ, 0xff9436);
-  addGoal(-AZ, 0x3aa0ff);
+  // --- faint side walls so a ball bounce reads as hitting a surface (physics is still an AABB box) ---
+  const wallMat = new THREE.MeshBasicMaterial({ color: 0x1f6f8f, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false });
+  for (const sx of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(AZ * 2, AY * 2), wallMat);
+    m.position.set(sx * AX, 0, 0); m.rotation.y = Math.PI / 2; scene.add(m);
+  }
+
+  // --- floor markings: centre circle + halfway line (spatial read / orientation) ---
+  const fy = -AY + 0.6;
+  const markMat = new THREE.LineBasicMaterial({ color: 0x6fb8e8, transparent: true, opacity: 0.5 });
+  const circ = new THREE.EllipseCurve(0, 0, AX * 0.32, AX * 0.32, 0, Math.PI * 2);
+  scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+    circ.getPoints(72).map((p) => new THREE.Vector3(p.x, fy, p.y))), markMat));
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    [new THREE.Vector3(-AX + r * 0.4, fy, 0), new THREE.Vector3(AX - r * 0.4, fy, 0)]), markMat));
+
+  // goals: ORANGE at +Z (enemy goal — you attack), BLUE at -Z (your goal — you defend); they sit ON the floor.
+  // Each end gets a team-coloured tint + goal box so you always know which way you're facing.
+  const GY = -AY + CFG.goalH;
+  endZone(AZ, 0xff9436); endZone(-AZ, 0x3aa0ff);
+  addGoal(AZ, 0xff9436); addGoal(-AZ, 0x3aa0ff);
+
+  function endZone(z, color) {
+    const sz = Math.sign(z);
+    const patch = new THREE.Mesh(new THREE.PlaneGeometry(AX * 1.4, 160),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+    patch.rotation.x = -Math.PI / 2; patch.position.set(0, fy - 0.1, z - sz * 80); scene.add(patch);
+    const gw = CFG.goalW * 1.7, gd = 130;
+    const box = [[-gw, z], [-gw, z - sz * gd], [gw, z - sz * gd], [gw, z]].map(([x, zz]) => new THREE.Vector3(x, fy, zz));
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(box),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 })));
+  }
 
   function addGoal(z, color) {
     const { goalW, goalH } = CFG;
@@ -227,27 +291,27 @@ function buildArena() {
       new THREE.PlaneGeometry(goalW * 2, goalH * 2),
       new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.55, transparent: true, opacity: 0.16, side: THREE.DoubleSide })
     );
-    back.position.set(0, 0, z + Math.sign(z) * 6);
+    back.position.set(0, GY, z + Math.sign(z) * 6);
     scene.add(back);
 
     const frame = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(goalW * 2, goalH * 2, 10)),
       new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 })
     );
-    frame.position.set(0, 0, z + Math.sign(z) * 3);
+    frame.position.set(0, GY, z + Math.sign(z) * 3);
     scene.add(frame);
 
-    // glowing posts for a "goal mouth" read
+    // glowing posts for a "goal mouth" read (mounted on the floor)
     const postMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.2, roughness: 0.4 });
     for (const sx of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, goalH * 2, 10), postMat);
-      post.position.set(sx * goalW, 0, z); scene.add(post);
+      post.position.set(sx * goalW, GY, z); scene.add(post);
     }
     for (const sy of [-1, 1]) {
       const bar = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, goalW * 2, 10), postMat);
-      bar.rotation.z = Math.PI / 2; bar.position.set(0, sy * goalH, z); scene.add(bar);
+      bar.rotation.z = Math.PI / 2; bar.position.set(0, GY + sy * goalH, z); scene.add(bar);
     }
-    const glow = new THREE.PointLight(color, 1.1, 560, 2); glow.position.set(0, 0, z * 0.9); scene.add(glow);
+    const glow = new THREE.PointLight(color, 1.1, 560, 2); glow.position.set(0, GY, z * 0.9); scene.add(glow);
   }
 }
 
@@ -380,7 +444,7 @@ function makeShark(teamHex, emissiveHex) {
     speed: 0, boostE: 1, hitCD: 0,
     dodging: false, dodgeT: 0, jumped: false, jumpTimer: 0, jumpCD: 0,
     flipAxis: new THREE.Vector3(), flipSign: 1,
-    ballCam: true, camSide: 1,        // default to Rocket-League ball cam
+    ballCam: false, camSide: 1,       // default = fixed chase cam locked behind the shark (Triangle/C toggles ball-cam)
   };
 }
 
@@ -409,13 +473,13 @@ function resetEntities() {
   bot.pos.set(0, 0, CFG.AZ * 0.5); bot.vel.set(0, 0, 0);
   bot.quat.identity(); bot.forward.set(0, 0, -1); bot.hitCD = 0; bot.boostE = 1;
 
-  ball.pos.set(0, 0, 0); ball.vel.set(0, 0, 0);
+  ball.pos.set(0, -CFG.AY + CFG.ballR, 0); ball.vel.set(0, 0, 0);   // ball starts on the ground
 }
 
 function startMatch() {
   scores.you = 0; scores.bot = 0; timeLeft = CFG.matchTime; suddenDeath = false;
   resetEntities();
-  you.ballCam = true; you.camSide = 1;
+  you.ballCam = false; you.camSide = 1;
   state = "playing";
   // snap camera behind player
   _tmp.copy(you.pos).addScaledVector(you.forward, -CFG.camBack).addScaledVector(WORLD_UP, CFG.camUp);
@@ -429,16 +493,17 @@ function kickoff() { resetEntities(); }
 
 /* ---- demo / attract mode: two AI sharks play each other (cyan attacks +Z, red attacks -Z) ---- */
 let demoT = 0, demoGoalTimer = 0;
-function demoKick() {            // launch the ball toward a goal so the demo stays lively (no midfield standoff)
+function demoKick() {            // pop the ball off the ground toward a goal so the demo stays lively
   const a = Math.random() * Math.PI * 2, zf = Math.random() < 0.5 ? 1 : -1;
-  ball.vel.set(Math.cos(a) * 55, (Math.random() - 0.5) * 45, zf * 120);
+  ball.vel.set(Math.cos(a) * 45, 70 + Math.random() * 45, zf * 115);
 }
 function startDemo() {
   scores.you = 0; scores.bot = 0; suddenDeath = false;
   resetEntities(); demoKick();
   state = "demo"; demoT = 0; demoGoalTimer = 0;
-  // snap the broadcast cam near the centred ball so it starts framed (don't wait for the lerp)
-  camera.position.set(0, 44, -95); camLook.set(0, 0, 0); camera.up.copy(WORLD_UP); camera.lookAt(camLook);
+  // snap the cam behind the blue shark so it starts framed (don't wait for the lerp)
+  _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack * 1.25).addScaledVector(WORLD_UP, CFG.camUp * 1.35);
+  camera.position.copy(_v); camLook.copy(you.pos).addScaledVector(you.forward, CFG.lookAhead); camera.up.copy(WORLD_UP); camera.lookAt(camLook);
   elStart.classList.add("hidden"); elOver.classList.add("hidden"); elHud.classList.remove("hidden");
   if (elCam) elCam.textContent = "DEMO"; if (elPad) elPad.textContent = "BLUE vs ORANGE · click to exit";
   banner("DEMO — BLUE vs ORANGE", "var(--gold)"); setTimeout(hideBanner, 1500);
@@ -457,8 +522,8 @@ function stepDemo(dt) {
   if (who) { scores[who]++; updateHud(); banner(who === "you" ? "BLUE SCORES" : "ORANGE SCORES", who === "you" ? "var(--blue)" : "var(--orange)"); demoGoalTimer = 1.6; }
 }
 function demoGoalCheck() {
-  const { AZ, ballR, goalW, goalH, restit } = CFG;
-  const inGoal = Math.abs(ball.pos.x) < goalW - ballR * 0.25 && Math.abs(ball.pos.y) < goalH - ballR * 0.25;
+  const { AZ, AY, ballR, goalW, goalH, restit } = CFG;
+  const inGoal = Math.abs(ball.pos.x) < goalW - ballR * 0.25 && ball.pos.y < -AY + 2 * goalH - ballR * 0.25;
   if (ball.pos.z > AZ - ballR) { if (inGoal) return "you"; ball.pos.z = AZ - ballR; ball.vel.z *= -restit; }
   else if (ball.pos.z < -AZ + ballR) { if (inGoal) return "bot"; ball.pos.z = -AZ + ballR; ball.vel.z *= -restit; }
   return null;
@@ -777,19 +842,28 @@ function collideShark(s) {
 }
 
 function stepBall(dt) {
-  ball.vel.multiplyScalar(Math.max(0, 1 - CFG.ballDrag * dt));
+  ball.vel.y -= CFG.gravity * dt;                                   // gravity
+  ball.vel.multiplyScalar(Math.max(0, 1 - CFG.ballDrag * dt));      // air drag
   ball.pos.addScaledVector(ball.vel, dt);
   const { AX, AY, ballR, restit } = CFG;
   if (ball.pos.x > AX - ballR) { ball.pos.x = AX - ballR; ball.vel.x *= -restit; }
   if (ball.pos.x < -AX + ballR) { ball.pos.x = -AX + ballR; ball.vel.x *= -restit; }
-  if (ball.pos.y > AY - ballR) { ball.pos.y = AY - ballR; ball.vel.y *= -restit; }
-  if (ball.pos.y < -AY + ballR) { ball.pos.y = -AY + ballR; ball.vel.y *= -restit; }
+  if (ball.pos.y > AY - ballR) { ball.pos.y = AY - ballR; ball.vel.y *= -restit; }   // ceiling
+  const floorY = -AY + ballR;
+  if (ball.pos.y < floorY) {                                        // ground: bounce, settle, roll
+    ball.pos.y = floorY;
+    if (ball.vel.y < 0) ball.vel.y *= -restit;
+    if (Math.abs(ball.vel.y) < 14) ball.vel.y = 0;                  // settle so it rests
+    const roll = Math.max(0, 1 - CFG.ballGroundFriction * dt);
+    ball.vel.x *= roll; ball.vel.z *= roll;
+  }
   // Z walls handled in checkGoals (goal opening vs solid wall)
 }
 
 function checkGoals() {
-  const { AZ, ballR, goalW, goalH, restit } = CFG;
-  const inGoal = Math.abs(ball.pos.x) < goalW - ballR * 0.25 && Math.abs(ball.pos.y) < goalH - ballR * 0.25;
+  const { AZ, AY, ballR, goalW, goalH, restit } = CFG;
+  // goal mouth sits on the floor: from y = -AY up to y = -AY + 2*goalH
+  const inGoal = Math.abs(ball.pos.x) < goalW - ballR * 0.25 && ball.pos.y < -AY + 2 * goalH - ballR * 0.25;
   if (ball.pos.z > AZ - ballR) {
     if (inGoal) { scoreGoal("you"); return; }
     ball.pos.z = AZ - ballR; ball.vel.z *= -restit;
@@ -824,7 +898,7 @@ function updateSharkVisual(s, dt) {
   } else {
     // AI sharks (bot, or both in demo): face velocity (nose +Z) with world up
     _tmp.copy(s.pos).add(s.forward);
-    s.mesh.up.copy(WORLD_UP); s.mesh.lookAt(_tmp); s.mesh.rotateY(Math.PI);
+    s.mesh.up.copy(WORLD_UP); s.mesh.lookAt(_tmp);   // nose (+Z) faces travel; lookAt already orients +Z at the target (no flip)
   }
   // tail sway + speed-scaled beat
   const beat = Math.sin(swimPhase + (s === bot ? 1.7 : 0)) * (0.32 + Math.min(0.25, s.speed / CFG.boostSpeed * 0.4));
@@ -840,12 +914,10 @@ function updateCamera(dt) {
   }
 
   if (state === "demo") {
-    // replay cam: sit just behind the ball's travel, with a gentle side sway, framing the chasing shark
-    _d.copy(ball.vel); if (_d.lengthSq() < 36) _d.set(0, 0, 1); _d.normalize();
-    _tmp.set(-_d.z, 0, _d.x).multiplyScalar(34 * Math.sin(demoT * 0.4));   // perpendicular sway
-    _v.copy(ball.pos).addScaledVector(_d, -90).addScaledVector(WORLD_UP, 44).add(_tmp);
-    camera.position.lerp(_v, 1 - Math.exp(-3.4 * dt));
-    camLook.lerp(ball.pos, 1 - Math.exp(-4.5 * dt));
+    // demo cam: a fixed chase cam locked BEHIND the blue shark, looking where its nose points
+    _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack * 1.25).addScaledVector(WORLD_UP, CFG.camUp * 1.35);
+    camera.position.lerp(_v, 1 - Math.exp(-3.2 * dt));
+    camLook.lerp(_d.copy(you.pos).addScaledVector(you.forward, CFG.lookAhead), 1 - Math.exp(-3.6 * dt));
     camera.up.copy(WORLD_UP); camera.lookAt(camLook);
     if (Math.abs(camera.fov - CFG.fov) > 0.1) { camera.fov += (CFG.fov - camera.fov) * (1 - Math.exp(-4 * dt)); camera.updateProjectionMatrix(); }
     return;
