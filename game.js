@@ -147,8 +147,8 @@ function boot() {
   ballLight = new THREE.PointLight(0xff3344, 1.6, 700, 2); scene.add(ballLight);
 
   // sharks
-  you = makeShark(0x9bf6ff, 0x39c9ff);
-  bot = makeShark(0xff7a88, 0xff3b54);
+  you = makeShark(0x3aa0ff, 0x1f6fff);   // team BLUE (you)
+  bot = makeShark(0xff9436, 0xff5e00);   // team ORANGE (bot)
   scene.add(you.mesh, bot.mesh);
 
   // input
@@ -217,9 +217,9 @@ function buildArena() {
     scene.add(grid);
   }
 
-  // goals: cyan at +Z (you attack), red at -Z (you defend)
-  addGoal(AZ, 0x6ff0ff);
-  addGoal(-AZ, 0xff5a6e);
+  // goals: ORANGE at +Z (enemy goal — you attack), BLUE at -Z (your goal — you defend)
+  addGoal(AZ, 0xff9436);
+  addGoal(-AZ, 0x3aa0ff);
 
   function addGoal(z, color) {
     const { goalW, goalH } = CFG;
@@ -380,7 +380,7 @@ function makeShark(teamHex, emissiveHex) {
     speed: 0, boostE: 1, hitCD: 0,
     dodging: false, dodgeT: 0, jumped: false, jumpTimer: 0, jumpCD: 0,
     flipAxis: new THREE.Vector3(), flipSign: 1,
-    ballCam: false,
+    ballCam: true, camSide: 1,        // default to Rocket-League ball cam
   };
 }
 
@@ -415,6 +415,7 @@ function resetEntities() {
 function startMatch() {
   scores.you = 0; scores.bot = 0; timeLeft = CFG.matchTime; suddenDeath = false;
   resetEntities();
+  you.ballCam = true; you.camSide = 1;
   state = "playing";
   // snap camera behind player
   _tmp.copy(you.pos).addScaledVector(you.forward, -CFG.camBack).addScaledVector(WORLD_UP, CFG.camUp);
@@ -439,8 +440,8 @@ function startDemo() {
   // snap the broadcast cam near the centred ball so it starts framed (don't wait for the lerp)
   camera.position.set(0, 44, -95); camLook.set(0, 0, 0); camera.up.copy(WORLD_UP); camera.lookAt(camLook);
   elStart.classList.add("hidden"); elOver.classList.add("hidden"); elHud.classList.remove("hidden");
-  if (elCam) elCam.textContent = "DEMO"; if (elPad) elPad.textContent = "CYAN vs RED · click to exit";
-  banner("DEMO — BOT vs BOT", "var(--gold)"); setTimeout(hideBanner, 1500);
+  if (elCam) elCam.textContent = "DEMO"; if (elPad) elPad.textContent = "BLUE vs ORANGE · click to exit";
+  banner("DEMO — BLUE vs ORANGE", "var(--gold)"); setTimeout(hideBanner, 1500);
   updateHud();
 }
 function exitDemo() {
@@ -453,7 +454,7 @@ function stepDemo(dt) {
   stepAI(you, CFG.AZ, dt); stepAI(bot, -CFG.AZ, dt);
   collideShark(you); collideShark(bot); stepBall(dt);
   const who = demoGoalCheck();
-  if (who) { scores[who]++; updateHud(); banner(who === "you" ? "CYAN SCORES" : "RED SCORES", who === "you" ? "var(--cyan)" : "var(--red)"); demoGoalTimer = 1.6; }
+  if (who) { scores[who]++; updateHud(); banner(who === "you" ? "BLUE SCORES" : "ORANGE SCORES", who === "you" ? "var(--blue)" : "var(--orange)"); demoGoalTimer = 1.6; }
 }
 function demoGoalCheck() {
   const { AZ, ballR, goalW, goalH, restit } = CFG;
@@ -466,7 +467,7 @@ function demoGoalCheck() {
 function scoreGoal(who) {
   scores[who]++;
   updateHud();
-  banner(who === "you" ? "GOAL!" : "BOT SCORES", who === "you" ? "var(--cyan)" : "var(--red)");
+  banner(who === "you" ? "GOAL!" : "ORANGE SCORES", who === "you" ? "var(--blue)" : "var(--orange)");
   if (suddenDeath) { goalTimer = 1.6; state = "goal"; pendingEnd = true; return; }
   goalTimer = CFG.goalPause; state = "goal"; pendingEnd = false;
 }
@@ -478,7 +479,7 @@ function endMatch() {
   $("finalBot").textContent = scores.bot;
   const win = scores.you > scores.bot;
   $("overTitle").textContent = win ? "YOU WIN" : (scores.you < scores.bot ? "YOU LOSE" : "DRAW");
-  $("overTitle").style.color = win ? "var(--cyan)" : "var(--red)";
+  $("overTitle").style.color = win ? "var(--blue)" : "var(--orange)";
   $("overMsg").textContent = win ? "The waters have been chummed. 🦈" : "You're gonna need a bigger boat.";
   elOver.classList.remove("hidden");
 }
@@ -853,19 +854,21 @@ function updateCamera(dt) {
   // up reference stays near world-up for legibility, except when flying near-vertical
   const upRef = Math.abs(you.forward.y) > 0.96 ? you.up : WORLD_UP;
 
-  let camDir, lookTgt;
+  let lookTgt;
   if (you.ballCam) {
-    _d.copy(ball.pos).sub(you.pos); if (_d.lengthSq() < 1) _d.copy(you.forward); _d.normalize();
-    camDir = _d;                                   // sit on the far side of the shark from the ball
-    lookTgt = _tmp.copy(ball.pos).lerp(you.pos, 0.25);
+    // Rocket-League ball cam: camera is anchored BEHIND THE CAR (along its own axis), and LOOKS AT THE BALL.
+    // It flips to the front of the car when the ball crosses behind, so the ball stays in view.
+    const f = _tmp.copy(ball.pos).sub(you.pos); const along = f.dot(you.forward) / (f.length() || 1);
+    if (along > 0.12) you.camSide = 1; else if (along < -0.12) you.camSide = -1;   // hysteresis -> no jitter
+    _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack * you.camSide).addScaledVector(upRef, CFG.camUp);
+    lookTgt = ball.pos;
   } else {
-    camDir = you.forward;
-    lookTgt = _tmp.copy(you.pos).addScaledVector(you.forward, CFG.lookAhead);
+    // car cam: sit behind the car and look where the nose points
+    _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack).addScaledVector(upRef, CFG.camUp);
+    lookTgt = _d.copy(you.pos).addScaledVector(you.forward, CFG.lookAhead);
   }
 
-  _v.copy(you.pos).addScaledVector(camDir, -CFG.camBack).addScaledVector(upRef, CFG.camUp);
-  const k = 1 - Math.exp(-CFG.camStiff * dt);
-  camera.position.lerp(_v, k);
+  camera.position.lerp(_v, 1 - Math.exp(-CFG.camStiff * dt));
   camLook.lerp(lookTgt, 1 - Math.exp(-(CFG.camStiff + 2) * dt));
   camera.up.copy(upRef);
   camera.lookAt(camLook);

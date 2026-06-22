@@ -5,6 +5,8 @@
   --teal: #43e0d8;
   --red:  #ff5a6e;
   --gold: #ffd34d;
+  --blue:   #3aa0ff;   /* team BLUE  (Rocket League) */
+  --orange: #ff9436;   /* team ORANGE */
   --mono: "Cascadia Mono", "Cascadia Code", "Consolas", ui-monospace, Menlo, monospace;
 }
 * { box-sizing: border-box; }
@@ -24,8 +26,8 @@ html, body {
   display: flex; align-items: center; gap: 18px;
   font-size: 34px; font-weight: 800; text-shadow: 0 0 12px rgba(127,243,255,.45), 0 2px 4px #000;
 }
-.hud-score #youScore { color: var(--cyan); }
-.hud-score #botScore { color: var(--red); }
+.hud-score #youScore { color: var(--blue); }
+.hud-score #botScore { color: var(--orange); }
 .hud-score .vs { font-size: 11px; letter-spacing: .25em; opacity: .65; }
 #clock {
   position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
@@ -85,7 +87,8 @@ html, body {
 .how { margin: 0 auto 22px; max-width: 680px; font-size: 14px; line-height: 1.6; opacity: .94; }
 .how p { margin: 4px 0 14px; }
 .how b { color: var(--ink); }
-.how .cyan { color: var(--cyan); } .how .red { color: var(--red); } .how .gold { color: var(--gold); }
+.how .cyan { color: var(--cyan); } .how .red { color: var(--red); }
+.how .blue { color: var(--blue); } .how .orange { color: var(--orange); } .how .gold { color: var(--gold); }
 .how .dim { opacity: .6; font-size: 12.5px; }
 
 .schemes { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; text-align: left; }
@@ -115,6 +118,6 @@ html, body {
 .btn-ghost:hover  { background: rgba(127,243,255,.08); box-shadow: 0 0 26px rgba(127,243,255,.35); }
 .btn-ghost:active { transform: translateY(1px); }
 .finalscore { display: flex; justify-content: center; align-items: center; gap: 24px; font-size: 64px; font-weight: 900; margin: 6px 0 4px; }
-#finalYou { color: var(--cyan); } #finalBot { color: var(--red); } .finalscore .dash { opacity: .45; }
+#finalYou { color: var(--blue); } #finalBot { color: var(--orange); } .finalscore .dash { opacity: .45; }
 .boot-error { margin-top: 16px; color: var(--red); font-size: 13px; line-height: 1.5; }
 .credit-inline { margin-top: 18px; font-size: 10.5px; color: rgba(127,243,255,.3); }

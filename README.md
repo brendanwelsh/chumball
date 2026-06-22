@@ -34,9 +34,9 @@ Plug in a **DualSense / standard gamepad** (it's first-class), or play with **mo
 | **Q / E** | Air roll left / right · **Ctrl** drift |
 | **C** | Ball-cam |
 
-Smash the **CHUMBALL** into the **cyan goal**; defend your **red goal** from the bot. Two-minute match,
-sudden-death overtime if tied, rematch on the end screen. **WATCH DEMO** on the start screen runs an
-attract mode: two AI sharks play each other (cyan vs red).
+You're **blue**. Smash the **CHUMBALL** into the **orange goal**; defend your **blue goal** from the
+orange bot. Two-minute match, sudden-death overtime if tied, rematch on the end screen. **WATCH DEMO**
+on the start screen runs an attract mode: two AI sharks play each other (blue vs orange).
 
 ## Run it
 
@@ -57,7 +57,7 @@ The start screen surfaces any boot/load error (with a "serve over http" tip) ins
 - **Flight feel** — quaternion orientation; momentum you redirect with grip (and lose with the L1 drift);
   an RL-style throttle curve; finite boost; a two-stage jump → dodge-flip; directional air roll.
 - **Ball physics** — impulses from shark impacts, wall bounces, drag, zero-g float; rectangular goals at
-  ±Z (cyan = attack, red = defend).
+  ±Z (orange = enemy net you attack, blue = your net you defend).
 - **Bot AI** — leads the ball, drops back to intercept/defend its goal, circles behind, then charges
   through the ball into the net with boost. **Demo mode** drives *both* sharks with this AI.
 - All feel knobs live in `CFG` at the top of `game.js` — the single place to tune.
