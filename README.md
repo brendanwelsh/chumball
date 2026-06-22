@@ -1,18 +1,42 @@
-# sharkthewaters
+# CHUMBALL
 
-> **Shark soccer in 3D space.** Fly the chumthewaters **ASCII shark** through a volumetric space arena
-> and rocket-boost a giant ball into the goal, versus an AI bot shark. Full 3D flight — no flat plane.
+> **Shark soccer in 3D space — Rocket-League-style.** Fly a low-poly shark through a volumetric space
+> arena (full 6-axis flight: yaw / pitch / roll) and rocket-boost a bloody soccer ball — the
+> **CHUMBALL** — into the opponent's goal, versus an AI bot shark. Full controller support.
+
+![CHUMBALL — bot-vs-bot demo](chumball.gif)
 
 ## Controls
 
+Plug in a **DualSense / standard gamepad** (it's first-class), or play with **mouse + keyboard**.
+
+### 🎮 Controller (Rocket-League layout)
+
 | Input | Action |
 |---|---|
-| **Move the mouse** | Fly — full 3D: bank left/right, climb/dive |
-| **Hold click / Space / Shift** | Rocket **boost** (drains, then regenerates) |
-| **C** | Toggle ball-cam |
+| **R2 / L2** | Throttle / brake-reverse |
+| **R1** | Boost (supersonic) |
+| **Cross (✕)** | Jump → press again for double-jump, or **+ stick = directional dodge-flip** |
+| **L1** | Powerslide (drift — loosens grip) |
+| **Square / Circle** | Air roll left / right |
+| **Triangle** | Ball-cam toggle |
+| **Left stick** | Steer (pitch + yaw) |
+| **Right stick** | Air roll / free look |
 
-Smash the **ball** into the **cyan goal**; defend your **red goal** from the bot shark. Two-minute
-match, sudden-death overtime if tied, rematch on the end screen.
+### ⌨️ Mouse + keyboard
+
+| Input | Action |
+|---|---|
+| **Mouse** | Steer (pitch + yaw) — up = climb |
+| **W / S** | Throttle / reverse (auto-cruise otherwise) |
+| **Shift / Click** | Boost |
+| **Space** | Jump → again for double-jump / dodge |
+| **Q / E** | Air roll left / right · **Ctrl** drift |
+| **C** | Ball-cam |
+
+Smash the **CHUMBALL** into the **cyan goal**; defend your **red goal** from the bot. Two-minute match,
+sudden-death overtime if tied, rematch on the end screen. **WATCH DEMO** on the start screen runs an
+attract mode: two AI sharks play each other (cyan vs red).
 
 ## Run it
 
@@ -28,30 +52,29 @@ The start screen surfaces any boot/load error (with a "serve over http" tip) ins
 
 ## How it works
 
-- **Player = the ASCII shark** — drawn to a canvas-texture billboard; the swim frame is chosen from
-  `shark-frames.js` by the shark's screen-space heading.
-- **Full 3D flight** — mouse offset from center steers yaw + pitch; cruise speed with a drain/regen
-  boost. Chase camera with a ball-cam toggle.
-- **Ball physics** — impulses from shark impacts, wall bounces, drag, zero-g float; goals are rings at
+- **Player = a sculpted 3D shark** — a revolved torpedo body with countershading, dorsal/pectoral/pelvic
+  fins, gills, eyes and a swaying crescent tail. It banks, pitches and rolls with your controls.
+- **Flight feel** — quaternion orientation; momentum you redirect with grip (and lose with the L1 drift);
+  an RL-style throttle curve; finite boost; a two-stage jump → dodge-flip; directional air roll.
+- **Ball physics** — impulses from shark impacts, wall bounces, drag, zero-g float; rectangular goals at
   ±Z (cyan = attack, red = defend).
-- **Bot** — seeks the spot behind the ball relative to your goal and rams it.
-- Tuning knobs live in `CFG` at the top of `game.js`.
+- **Bot AI** — leads the ball, drops back to intercept/defend its goal, circles behind, then charges
+  through the ball into the net with boost. **Demo mode** drives *both* sharks with this AI.
+- All feel knobs live in `CFG` at the top of `game.js` — the single place to tune.
+
+URL hooks for QA: `#play` auto-launches a match, `#demo` auto-launches bot-v-bot, `#capture` does a
+deterministic-seeded demo (used to record the GIF).
 
 ## Files
 
 - `index.html` — shell, HUD, start/over screens, boot-error surfacing
-- `game.js` — the whole game (flight, ball physics, bot, match logic)
-- `shark-frames.js` — ASCII shark frame data (shared with the `chumthewaters` mascot page)
+- `game.js` — the whole game (flight, ball physics, bot AI, demo mode, match logic)
 - `style.css` — HUD + overlay styling
 - `vendor/three.module.js` — vendored Three.js (WebGL)
-
-## Related
-
-- **[chumthewaters](https://github.com/brendanwelsh/chumthewaters)** — the static ASCII-shark mascot
-  page these frames come from.
+- `chumball.gif` — recorded bot-v-bot demo
 
 ## Credits
 
-ASCII frames adapted from **"Ascii Shark"** by **Kitty (`meowinglion`)** — [Wallpaper Engine Workshop
-#3606705311](https://steamcommunity.com/sharedfiles/filedetails/?id=3606705311). The credit is shown on
-the start screen.
+The shark mascot's lineage is the **chumthewaters** ASCII shark, adapted from **"Ascii Shark"** by
+**Kitty (`meowinglion`)** — [Wallpaper Engine Workshop #3606705311](https://steamcommunity.com/sharedfiles/filedetails/?id=3606705311).
+The credit is shown on the start screen.

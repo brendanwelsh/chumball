@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>~sharkthewaters — 3D space rocket ball shark</title>
-  <meta name="description" content="Fly the chumthewaters ASCII shark through a 3D space arena and rocket-boost a ball into the goal. Shark soccer vs a bot.">
+  <title>CHUMBALL — 3D space rocket blood-ball shark soccer</title>
+  <meta name="description" content="CHUMBALL: fly a 3D shark through a space arena and rocket-boost a bloody soccer ball into the goal, Rocket-League-style, vs an AI bot.">
   <meta name="color-scheme" content="dark">
   <link rel="stylesheet" href="style.css">
 
@@ -30,8 +30,9 @@
   <div id="hud" class="hidden" aria-hidden="true">
     <div class="hud-score"><span id="youScore">0</span><span class="vs">YOU&nbsp;&middot;&nbsp;BOT</span><span id="botScore">0</span></div>
     <div id="clock">2:00</div>
+    <div id="speedTag" class="hidden">&#9650; SUPERSONIC</div>
     <div class="hud-boost"><span class="lbl">BOOST</span><div id="boostBar"><div id="boostFill"></div></div></div>
-    <div class="hud-hint">C &middot; ball-cam</div>
+    <div class="hud-hint"><span id="camState">CHASE-CAM</span> &middot; <span id="padState"></span></div>
   </div>
 
   <!-- goal / event banner -->
@@ -40,15 +41,37 @@
   <!-- START -->
   <div id="start" class="overlay">
     <div class="panel">
-      <div class="title">SHARK<span class="ball">&#9679;</span>SOCCER</div>
-      <div class="subtitle">3D &middot; SPACE &middot; ROCKET &middot; BALL &middot; SHARK</div>
+      <div class="title">CHUM<span class="ball">&#9679;</span>BALL</div>
+      <div class="subtitle">3D &middot; SPACE &middot; ROCKET &middot; BLOOD-BALL &middot; SHARK SOCCER</div>
       <div class="how">
-        <p><b>Move the mouse</b> to fly &mdash; full 3D: left/right banks, up/down climbs &amp; dives.</p>
-        <p><b>Hold click / Space / Shift</b> to <b class="cyan">ROCKET BOOST</b>.</p>
-        <p>Smash the <b class="gold">ball</b> into the <b class="cyan">cyan goal</b>; defend your <b class="red">red goal</b> from the bot shark.</p>
-        <p class="dim"><b>C</b> toggles ball-cam.</p>
+        <p>Rocket-boost the <b class="red">CHUMBALL</b> into the <b class="cyan">cyan goal</b>; defend your <b class="red">red goal</b> from the bot shark. Full 3D flight &mdash; pitch, yaw &amp; roll.</p>
+        <div class="schemes">
+          <div class="scheme">
+            <div class="scheme-h">🎮 CONTROLLER <span>(DualSense / standard)</span></div>
+            <ul>
+              <li><b>R2 / L2</b> &mdash; throttle / brake-reverse</li>
+              <li><b>R1</b> &mdash; <b class="cyan">boost</b> &middot; <b>Cross</b> &mdash; jump, again = double-jump (+stick = dodge-flip)</li>
+              <li><b>Left stick</b> &mdash; steer (pitch + yaw)</li>
+              <li><b>Right stick / Square&middot;Circle</b> &mdash; air roll L/R</li>
+              <li><b>L1</b> &mdash; powerslide (drift) &middot; <b>Triangle</b> &mdash; ball-cam</li>
+            </ul>
+          </div>
+          <div class="scheme">
+            <div class="scheme-h">⌨️ MOUSE + KEYS</div>
+            <ul>
+              <li><b>Mouse</b> &mdash; steer (pitch + yaw)</li>
+              <li><b>W / S</b> &mdash; throttle / reverse (auto-cruise otherwise)</li>
+              <li><b>Shift / Click</b> &mdash; <b class="cyan">boost</b> &middot; <b>Space</b> &mdash; jump, again = double / dodge</li>
+              <li><b>Q / E</b> &mdash; air roll L/R &middot; <b>Ctrl</b> &mdash; drift</li>
+              <li><b>C</b> &mdash; ball-cam</li>
+            </ul>
+          </div>
+        </div>
       </div>
-      <button id="startBtn" class="btn">LAUNCH &#9656;</button>
+      <div class="btnrow">
+        <button id="startBtn" class="btn">LAUNCH &#9656;</button>
+        <button id="demoBtn" class="btn btn-ghost">WATCH DEMO</button>
+      </div>
       <p id="bootError" class="boot-error hidden"></p>
       <p class="credit-inline">ASCII shark adapted from &ldquo;Ascii Shark&rdquo; by Kitty (meowinglion) &middot; Wallpaper Engine #3606705311</p>
     </div>
@@ -64,7 +87,11 @@
     </div>
   </div>
 
-  <script src="shark-frames.js"></script>
-  <script type="module" src="game.js"></script>
+  <!-- dynamic import with a cache-busting query so a normal refresh always gets the latest game.js -->
+  <script type="module">
+    import("./game.js?v=" + Date.now()).catch(function (e) {
+      if (window.__sharkErr) window.__sharkErr((e && e.message) || "module failed to load");
+    });
+  </script>
 </body>
 </html>

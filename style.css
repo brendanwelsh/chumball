@@ -1,4 +1,4 @@
-/* ~sharkthewaters — 3D space rocket ball shark. Neon cyan/red on deep space-black. */
+/* CHUMBALL — 3D space rocket blood-ball shark soccer. Neon cyan/red on deep space-black. */
 :root {
   --ink:  #dffaff;
   --cyan: #7ff3ff;
@@ -39,7 +39,18 @@ html, body {
   background: rgba(2,12,24,.6); box-shadow: 0 0 10px rgba(67,224,216,.25) inset;
 }
 #boostFill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--teal), var(--cyan), var(--gold)); transition: width .08s linear; }
+#boostBar.boosting { box-shadow: 0 0 14px rgba(127,243,255,.7) inset, 0 0 12px rgba(127,243,255,.5); }
+#boostBar.empty { border-color: var(--red); animation: boostlow .6s ease-in-out infinite; }
+@keyframes boostlow { 0%,100% { box-shadow: 0 0 4px rgba(255,90,110,.4) inset; } 50% { box-shadow: 0 0 16px rgba(255,90,110,.9) inset; } }
 .hud-hint { position: absolute; right: 24px; bottom: 24px; font-size: 11px; letter-spacing: .18em; color: rgba(127,243,255,.4); }
+
+#speedTag {
+  position: absolute; top: 88px; left: 50%; transform: translateX(-50%);
+  font-size: 15px; font-weight: 800; letter-spacing: .22em; color: var(--gold);
+  text-shadow: 0 0 14px rgba(255,211,77,.8), 0 0 28px rgba(255,211,77,.4);
+  animation: superson .5s ease-in-out infinite;
+}
+@keyframes superson { 0%,100% { opacity: .75; transform: translateX(-50%) scale(1); } 50% { opacity: 1; transform: translateX(-50%) scale(1.06); } }
 
 /* ---------- goal banner ---------- */
 #goalBanner { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; pointer-events: none; }
@@ -69,13 +80,25 @@ html, body {
   color: var(--cyan); text-shadow: 0 0 24px rgba(127,243,255,.6);
 }
 .title.small { font-size: clamp(28px, 5vw, 46px); }
-.title .ball { color: var(--gold); text-shadow: 0 0 22px var(--gold); font-size: .8em; }
+.title .ball { color: var(--red); text-shadow: 0 0 22px var(--red), 0 0 40px #7a0010; font-size: .8em; }
 .subtitle { margin: 8px 0 18px; color: var(--teal); letter-spacing: .2em; font-size: clamp(11px, 1.6vw, 15px); }
-.how { margin: 0 auto 22px; max-width: 560px; font-size: 14px; line-height: 1.8; opacity: .94; }
-.how p { margin: 4px 0; }
+.how { margin: 0 auto 22px; max-width: 680px; font-size: 14px; line-height: 1.6; opacity: .94; }
+.how p { margin: 4px 0 14px; }
 .how b { color: var(--ink); }
 .how .cyan { color: var(--cyan); } .how .red { color: var(--red); } .how .gold { color: var(--gold); }
 .how .dim { opacity: .6; font-size: 12.5px; }
+
+.schemes { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; text-align: left; }
+.scheme {
+  flex: 1 1 280px; max-width: 320px; padding: 12px 16px;
+  border: 1px solid rgba(67,224,216,.22); border-radius: 11px; background: rgba(4,14,28,.5);
+}
+.scheme-h { color: var(--cyan); font-size: 12.5px; letter-spacing: .08em; margin-bottom: 8px; }
+.scheme-h span { color: var(--teal); opacity: .65; font-size: 10.5px; letter-spacing: 0; }
+.scheme ul { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.7; opacity: .9; }
+.scheme li { margin: 2px 0; }
+.scheme li b { color: var(--gold); font-weight: 700; }
+.scheme li b.cyan { color: var(--cyan); }
 .btn {
   font-family: var(--mono); font-size: 19px; font-weight: 800; letter-spacing: .14em;
   color: #021018; background: linear-gradient(180deg, var(--cyan), var(--teal));
@@ -84,6 +107,13 @@ html, body {
 }
 .btn:hover  { transform: translateY(-2px); box-shadow: 0 0 36px rgba(127,243,255,.7), 0 7px 0 #1b6f6a; }
 .btn:active { transform: translateY(2px);  box-shadow: 0 0 18px rgba(67,224,216,.5), 0 3px 0 #1b6f6a; }
+.btnrow { display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.btn-ghost {
+  color: var(--cyan); background: transparent;
+  border: 1px solid rgba(127,243,255,.5); box-shadow: 0 0 18px rgba(67,224,216,.15);
+}
+.btn-ghost:hover  { background: rgba(127,243,255,.08); box-shadow: 0 0 26px rgba(127,243,255,.35); }
+.btn-ghost:active { transform: translateY(1px); }
 .finalscore { display: flex; justify-content: center; align-items: center; gap: 24px; font-size: 64px; font-weight: 900; margin: 6px 0 4px; }
 #finalYou { color: var(--cyan); } #finalBot { color: var(--red); } .finalscore .dash { opacity: .45; }
 .boot-error { margin-top: 16px; color: var(--red); font-size: 13px; line-height: 1.5; }
