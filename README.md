@@ -9,6 +9,8 @@
 ## Controls
 
 Plug in a **DualSense / standard gamepad** (it's first-class), or play with **mouse + keyboard**.
+Like Rocket League, **your controls change depending on whether you're on the floor or in the air** —
+the HUD shows **GROUND / AIR**.
 
 ### 🎮 Controller (Rocket-League layout)
 
@@ -17,21 +19,21 @@ Plug in a **DualSense / standard gamepad** (it's first-class), or play with **mo
 | **R2 / L2** | Throttle / brake-reverse |
 | **R1** | Boost (supersonic) |
 | **Cross (✕)** | Jump → press again for double-jump, or **+ stick = directional dodge-flip** |
-| **L1** | Powerslide (drift — loosens grip) |
-| **Square / Circle** | Air roll left / right |
+| **Left stick** | **Ground:** steer · **Air:** pitch + yaw (air-steer) |
+| **L1** | **Ground:** powerslide (drift — loosens grip) · **Air:** free air-roll (hold → stick X = roll) |
+| **Square / Circle** | Directional air-roll left / right (constant roll; stick still pitches/yaws) |
 | **Triangle** | Ball-cam toggle |
-| **Left stick** | Steer (pitch + yaw) |
-| **Right stick** | Air roll / free look |
 
 ### ⌨️ Mouse + keyboard
 
 | Input | Action |
 |---|---|
-| **Mouse** | Steer (pitch + yaw) — up = climb |
+| **Mouse** | **Ground:** steer · **Air:** pitch + yaw — up = nose up · **A / D** also steer |
 | **W / S** | Throttle / reverse (auto-cruise otherwise) |
 | **Shift / Click** | Boost |
 | **Space** | Jump → again for double-jump / dodge |
-| **Q / E** | Air roll left / right · **Ctrl** drift |
+| **Ctrl** | **Ground:** powerslide · **Air:** free air-roll (hold → mouse X = roll) |
+| **Q / E** | Directional air-roll left / right |
 | **C** | Ball-cam |
 
 You're **blue**. Smash the **CHUMBALL** into the **orange goal**; defend your **blue goal** from the
@@ -44,8 +46,8 @@ Three.js is vendored as an ES module (no CDN, no build step), so it **must be se
 ES modules are blocked on `file://`. From this folder:
 
 ```sh
-python -m http.server 8000
-# then open http://localhost:8000/   (this game's fixed port; dualstick-rhythm uses 8001)
+python -m http.server 8009
+# then open http://localhost:8009/   (this game's fixed port; dualstick-rhythm holds 8000 on this PC)
 ```
 
 The start screen surfaces any boot/load error (with a "serve over http" tip) instead of a blank canvas.
@@ -54,8 +56,13 @@ The start screen surfaces any boot/load error (with a "serve over http" tip) ins
 
 - **Player = a sculpted 3D shark** — a revolved torpedo body with countershading, dorsal/pectoral/pelvic
   fins, gills, eyes and a swaying crescent tail. It banks, pitches and rolls with your controls.
-- **Flight feel** — quaternion orientation; momentum you redirect with grip (and lose with the L1 drift);
-  an RL-style throttle curve; finite boost; a two-stage jump → dodge-flip; directional air roll.
+- **Ground vs air (Rocket-League-style)** — on the floor you drive on the wheels: the stick **steers**
+  (yaw about world-up), grip pulls velocity to your nose, and **powerslide** loosens it to drift. Jump
+  and you're **airborne**: full local-axis pitch/yaw/roll, momentum + gravity + boost, **free air-roll**
+  (hold powerslide → stick X becomes roll) and **directional air-roll** (Square/Circle). Land and the
+  shark re-levels onto its wheels. The HUD shows **GROUND / AIR**.
+- **Flight feel** — quaternion orientation; RL-style throttle curve; finite boost; a two-stage jump →
+  dodge-flip. All feel knobs live in `CFG` (ground-driving and air-control are separate blocks).
 - **Ball physics** — impulses from shark impacts, wall bounces, drag, zero-g float; rectangular goals at
   ±Z (orange = enemy net you attack, blue = your net you defend).
 - **Bot AI** — leads the ball, drops back to intercept/defend its goal, circles behind, then charges

@@ -32,7 +32,7 @@
     <div id="clock">2:00</div>
     <div id="speedTag" class="hidden">&#9650; SUPERSONIC</div>
     <div class="hud-boost"><span class="lbl">BOOST</span><div id="boostBar"><div id="boostFill"></div></div></div>
-    <div class="hud-hint"><span id="camState">CHASE-CAM</span> &middot; <span id="padState"></span></div>
+    <div class="hud-hint"><span id="moveState">GROUND</span> &middot; <span id="camState">CHASE-CAM</span> &middot; <span id="padState"></span></div>
   </div>
 
   <!-- goal / event banner -->
@@ -44,26 +44,26 @@
       <div class="title">CHUM<span class="ball">&#9679;</span>BALL</div>
       <div class="subtitle">3D &middot; SPACE &middot; ROCKET &middot; BLOOD-BALL &middot; SHARK SOCCER</div>
       <div class="how">
-        <p>You're <b class="blue">BLUE</b>. Rocket-boost the <b class="red">CHUMBALL</b> into the <b class="orange">orange goal</b>; defend your <b class="blue">blue goal</b> from the orange bot. Full 3D flight &mdash; pitch, yaw &amp; roll.</p>
+        <p>You're <b class="blue">BLUE</b>. Boost the <b class="red">CHUMBALL</b> into the <b class="orange">orange goal</b>; defend your <b class="blue">blue goal</b> from the orange bot. <b>Drive on the floor</b> like a car &mdash; then jump, boost &amp; <b>air-roll</b> for full 3D aerials.</p>
         <div class="schemes">
           <div class="scheme">
             <div class="scheme-h">🎮 CONTROLLER <span>(DualSense / standard)</span></div>
             <ul>
-              <li><b>R2 / L2</b> &mdash; throttle / brake-reverse</li>
-              <li><b>R1</b> &mdash; <b class="cyan">boost</b> &middot; <b>Cross</b> &mdash; jump, again = double-jump (+stick = dodge-flip)</li>
-              <li><b>Left stick</b> &mdash; steer (pitch + yaw)</li>
-              <li><b>Right stick / Square&middot;Circle</b> &mdash; air roll L/R</li>
-              <li><b>L1</b> &mdash; powerslide (drift) &middot; <b>Triangle</b> &mdash; ball-cam</li>
+              <li><b>R2 / L2</b> &mdash; throttle / brake-reverse &middot; <b>R1</b> &mdash; <b class="cyan">boost</b></li>
+              <li><b>Left stick</b> &mdash; <b>ground:</b> steer &middot; <b>air:</b> pitch + yaw</li>
+              <li><b>L1</b> &mdash; <b>ground:</b> powerslide / drift &middot; <b>air:</b> free air-roll (hold &rarr; stick = roll)</li>
+              <li><b>Square / Circle</b> &mdash; directional air-roll left / right</li>
+              <li><b>Cross</b> &mdash; jump &rarr; double-jump / dodge-flip &middot; <b>Triangle</b> &mdash; ball-cam</li>
             </ul>
           </div>
           <div class="scheme">
             <div class="scheme-h">⌨️ MOUSE + KEYS</div>
             <ul>
-              <li><b>Mouse</b> &mdash; steer (pitch + yaw)</li>
-              <li><b>W / S</b> &mdash; throttle / reverse (auto-cruise otherwise)</li>
-              <li><b>Shift / Click</b> &mdash; <b class="cyan">boost</b> &middot; <b>Space</b> &mdash; jump, again = double / dodge</li>
-              <li><b>Q / E</b> &mdash; air roll L/R &middot; <b>Ctrl</b> &mdash; drift</li>
-              <li><b>C</b> &mdash; ball-cam</li>
+              <li><b>Mouse</b> &mdash; <b>ground:</b> steer &middot; <b>air:</b> pitch + yaw &middot; <b>A / D</b> &mdash; steer</li>
+              <li><b>W / S</b> &mdash; throttle / reverse (auto-cruise otherwise) &middot; <b>Shift / Click</b> &mdash; <b class="cyan">boost</b></li>
+              <li><b>Ctrl</b> &mdash; <b>ground:</b> powerslide / drift &middot; <b>air:</b> free air-roll (hold &rarr; mouse = roll)</li>
+              <li><b>Q / E</b> &mdash; directional air-roll left / right</li>
+              <li><b>Space</b> &mdash; jump &rarr; double / dodge &middot; <b>C</b> &mdash; ball-cam</li>
             </ul>
           </div>
         </div>

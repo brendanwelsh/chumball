@@ -31,10 +31,19 @@ const CFG = {
   grip: 6.5,                       // how hard velocity follows the nose (arcade steer)
   driftGrip: 1.3,                  // grip while powersliding (L1) — lets you drift/strafe
 
-  /* angular control (rad/s) — calmer, less spinny */
-  pitchRate: 1.8, yawRate: 1.8, rollRate: 2.2,
-  angResp: 9,                      // how fast angular velocity eases to target (snappier = higher)
-  invertPitch: false,              // false = RL default (stick up = nose down)
+  /* ground driving — RL "on the wheels": the stick STEERS (yaw about world-up); powerslide loosens grip to drift */
+  groundTurn: 2.7,                 // steer rate (rad/s) at speed
+  slideTurnMul: 1.6,               // powerslide whips the nose around faster
+  angResp: 9,                      // how fast steer-rate eases in
+  maxBank: 0.6,                    // cosmetic lean into a turn (rad)
+
+  /* air control — RL aerial: full LOCAL-axis pitch/yaw/roll. Hold powerslide = free air-roll (stick X -> roll);
+     Square/Circle (Q/E) = directional air-roll (constant roll while the stick still pitches/yaws). */
+  airPitchRate: 2.6, airYawRate: 2.4, airRollRate: 3.4,
+  airResp: 7.5,                    // how fast air angular velocity eases in
+  sharkGravity: 150,               // falls back to the floor (a touch < ball gravity = forgiving aerials)
+  airDrag: 0.25,                   // mild air resistance
+  invertPitch: false,              // false = stick/mouse up = nose UP
 
   /* boost (energy 0..1) */
   boostAccel: 250,
@@ -78,7 +87,7 @@ const $ = (id) => document.getElementById(id);
 const elScene = $("scene"), elHud = $("hud"), elStart = $("start"), elOver = $("over");
 const elYou = $("youScore"), elBot = $("botScore"), elClock = $("clock"), elBoost = $("boostFill");
 const elBanner = $("goalBanner"), elBannerTxt = $("goalText"), elCam = $("camState"), elPad = $("padState");
-const elSpeed = $("speedTag"), elBoostBar = $("boostBar");
+const elSpeed = $("speedTag"), elBoostBar = $("boostBar"), elMove = $("moveState");
 
 let booted = false;
 $("startBtn").addEventListener("click", () => booted && startMatch());
@@ -90,6 +99,7 @@ let renderer, scene, camera, ball, ballLight, you, bot;
 const clock = new THREE.Clock();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const LX = new THREE.Vector3(1, 0, 0), LY = new THREE.Vector3(0, 1, 0), LZ = new THREE.Vector3(0, 0, 1);
+const _euler = new THREE.Euler();    // scratch for arcade orientation (declared early: boot() runs before the temps block)
 
 // #capture: deterministic seed so the starfield/ball texture don't flicker across screenshot frames (GIF capture)
 if (location.hash === "#capture") {
@@ -114,6 +124,9 @@ function boot() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // filmic tonemap: rolls off the neon highlights so colours read clean instead of blowing out to white
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.3;
   elScene.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
@@ -124,9 +137,11 @@ function boot() {
   camera.position.set(0, 80, -CFG.AZ - 220);
   camera.lookAt(0, 0, 0);
 
-  scene.add(new THREE.AmbientLight(0x5a78ff, 0.6));
-  const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(120, 260, 140); scene.add(key);
-  const rim = new THREE.DirectionalLight(0x55ffe0, 0.5); rim.position.set(-180, -80, -160); scene.add(rim);
+  // sky/ground fill (hemisphere) gives the sharks clean, even shading instead of a flat ambient wash
+  scene.add(new THREE.HemisphereLight(0x7f9cff, 0x0a1426, 0.7));
+  scene.add(new THREE.AmbientLight(0x5a78ff, 0.32));
+  const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(120, 260, 140); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x55ffe0, 0.6); rim.position.set(-180, -80, -160); scene.add(rim);
 
   buildStars();
   buildArena();
@@ -137,13 +152,13 @@ function boot() {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(),
     mesh: new THREE.Mesh(
       new THREE.SphereGeometry(CFG.ballR, 36, 26),
-      new THREE.MeshStandardMaterial({ map: makeChumballTexture(), color: 0xff6a6a, emissive: 0x4a0008, emissiveIntensity: 0.55, roughness: 0.42, metalness: 0.05 })
+      new THREE.MeshStandardMaterial({ map: makeChumballTexture(), color: 0xff6a6a, emissive: 0x4a0008, emissiveIntensity: 0.7, roughness: 0.42, metalness: 0.05 })
     ),
   };
-  // dark crimson panel seams so it reads as a ball + spins legibly
+  // dark crimson panel seams so it reads as a ball + spins legibly (subtle — not a wireframe cage)
   ball.mesh.add(new THREE.LineSegments(
-    new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(CFG.ballR * 1.013, 1)),
-    new THREE.LineBasicMaterial({ color: 0x2a0004, transparent: true, opacity: 0.6 })
+    new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(CFG.ballR * 1.012, 1)),
+    new THREE.LineBasicMaterial({ color: 0x2a0004, transparent: true, opacity: 0.35 })
   ));
   scene.add(ball.mesh);
   ballLight = new THREE.PointLight(0xff3344, 1.6, 700, 2); scene.add(ballLight);
@@ -168,17 +183,22 @@ function boot() {
 
 /* ============================================================ WORLD BUILDERS */
 function buildStars() {
-  const N = 1300, pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const r = 1700 + Math.random() * 2000;
-    const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
-    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-    pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
-    pos[i * 3 + 2] = r * Math.cos(ph);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xbfd4ff, size: 6, sizeAttenuation: true, transparent: true, opacity: 0.9, fog: false })));
+  // two layers: a dense fine field + a sparse layer of brighter "near" stars — reads cleaner than one chunky size
+  const layer = (N, size, opacity, color) => {
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const r = 1700 + Math.random() * 2000;
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+      pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
+      pos[i * 3 + 2] = r * Math.cos(ph);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color, size, sizeAttenuation: true, transparent: true, opacity, fog: false })));
+  };
+  layer(1500, 3.2, 0.8, 0xbfd4ff);   // fine dust of distant stars
+  layer(220, 6.5, 0.95, 0xeaf2ff);   // a few brighter foreground stars
 }
 
 function buildDust() {
@@ -190,7 +210,7 @@ function buildDust() {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x4ad6e0, size: 2.4, sizeAttenuation: true, transparent: true, opacity: 0.5 })));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x4ad6e0, size: 2.0, sizeAttenuation: true, transparent: true, opacity: 0.3 })));
 }
 
 function buildArena() {
@@ -367,6 +387,20 @@ function tri(a, b, c, mat) {
   g.computeVertexNormals();
   return new THREE.Mesh(g, mat);
 }
+// A flat fin in the x=0 plane from an ordered [z,y] outline (triangle-fan). Lets fins have a clean
+// curved trailing edge with a few verts instead of one crude triangle. Double-sided material handles winding.
+function fin(outlineZY, mat) {
+  const v = [];
+  for (let i = 1; i < outlineZY.length - 1; i++) {
+    v.push(0, outlineZY[0][1], outlineZY[0][0]);
+    v.push(0, outlineZY[i][1], outlineZY[i][0]);
+    v.push(0, outlineZY[i + 1][1], outlineZY[i + 1][0]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, mat);
+}
 
 // Builds a sculpted shark (smooth lathe body, countershaded, with fins/gills/tail/eyes). Nose = +Z.
 function makeShark(teamHex, emissiveHex) {
@@ -380,7 +414,7 @@ function makeShark(teamHex, emissiveHex) {
     [-14, 0.0], [-13, 1.0], [-11, 1.5], [-8, 2.4], [-4, 3.7], [0, 4.6],
     [4, 4.4], [8, 3.5], [11, 2.5], [13, 1.5], [14.4, 0.7], [15, 0.16],
   ].map(([y, r]) => new THREE.Vector2(Math.max(r, 0.001), y));
-  const bodyGeo = new THREE.LatheGeometry(prof, 26);
+  const bodyGeo = new THREE.LatheGeometry(prof, 48);   // more segments = smoother torpedo, no facets
   bodyGeo.rotateX(Math.PI / 2);          // long axis +Y -> +Z (nose forward)
   bodyGeo.scale(0.96, 1.06, 1);          // slight lateral compression
   // countershading: vertex colours from pale belly to dark back by height
@@ -397,7 +431,8 @@ function makeShark(teamHex, emissiveHex) {
 
   // --- fins (flat, double-sided) ---
   const finMat = new THREE.MeshStandardMaterial({ color: finCol, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide, emissive: emissiveHex, emissiveIntensity: 0.18 });
-  g.add(tri([0, 4.0, 3.4], [0, 4.0, -4.2], [0, 10.8, -3.0], finMat));            // dorsal (iconic, back-swept)
+  // dorsal (iconic): swept-back blade with a concave trailing edge — reads as a proper shark fin
+  g.add(fin([[3.6, 4.0], [-1.6, 11.0], [-3.4, 7.6], [-4.7, 5.0], [-4.4, 4.0]], finMat));
   g.add(tri([0, 2.2, -8.6], [0, 2.2, -10.8], [0, 4.4, -10.2], finMat));          // small second dorsal
   for (const sx of [-1, 1]) {
     g.add(tri([sx * 2.8, -1.4, 4.2], [sx * 2.2, -2.2, 0.5], [sx * 11.5, -5.6, -1.5], finMat)); // pectorals
@@ -422,16 +457,22 @@ function makeShark(teamHex, emissiveHex) {
 
   // --- caudal (tail) fin on a pivot so it can sway: heterocercal, large upper lobe ---
   const tail = new THREE.Group(); tail.position.set(0, 0, -13.0);
-  tail.add(tri([0, 0.6, 0], [0, 9.5, -6.5], [0, 2.2, -9.0], finMat));            // upper lobe (large)
-  tail.add(tri([0, -0.6, 0], [0, -5.2, -5.5], [0, -0.5, -8.0], finMat));         // lower lobe (small)
+  tail.add(fin([[0, 0.6], [-6.8, 9.6], [-8.4, 6.0], [-9.2, 2.0]], finMat));      // upper lobe (large crescent)
+  tail.add(fin([[0, -0.6], [-5.6, -5.2], [-8.2, -0.6]], finMat));                // lower lobe (small)
   g.add(tail);
 
-  // --- boost flame ---
-  const flame = new THREE.Mesh(
-    new THREE.ConeGeometry(2.4, 11, 12),
-    new THREE.MeshBasicMaterial({ color: emissiveHex, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false })
+  // --- boost flame: a soft twin-cone jet (translucent outer + bright core) instead of one long streak ---
+  const flame = new THREE.Group();
+  const outer = new THREE.Mesh(
+    new THREE.ConeGeometry(2.6, 8.5, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: emissiveHex, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })
   );
-  flame.rotation.x = -Math.PI / 2; flame.position.set(0, 0, -15.5); flame.visible = false; g.add(flame);
+  const core = new THREE.Mesh(
+    new THREE.ConeGeometry(1.2, 5.4, 12),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(emissiveHex).lerp(new THREE.Color(0xffffff), 0.6), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  for (const m of [outer, core]) { m.rotation.x = -Math.PI / 2; flame.add(m); }
+  flame.position.set(0, 0, -15.0); flame.visible = false; g.add(flame);
 
   g.scale.setScalar(CFG.sharkLen / 16);
 
@@ -440,7 +481,9 @@ function makeShark(teamHex, emissiveHex) {
     pos: new THREE.Vector3(), vel: new THREE.Vector3(),
     quat: new THREE.Quaternion(),
     forward: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0), right: new THREE.Vector3(1, 0, 0),
-    wp: 0, wy: 0, wr: 0,                  // angular velocity (pitch/yaw/roll)
+    wp: 0, wy: 0, wr: 0,                  // eased angular rates (pitch/yaw/roll)
+    yawA: 0, peA: 0, bank: 0,             // ground orientation: heading, (level) pitch, cosmetic bank
+    grounded: true,                       // RL state: on the wheels (simple steering) vs airborne (full aerial)
     speed: 0, boostE: 1, hitCD: 0,
     dodging: false, dodgeT: 0, jumped: false, jumpTimer: 0, jumpCD: 0,
     flipAxis: new THREE.Vector3(), flipSign: 1,
@@ -454,6 +497,18 @@ function deriveAxes(s) {
   s.right.copy(LX).applyQuaternion(s.quat);
 }
 
+// GROUND orientation from heading(yaw) + cosmetic bank (pitch is pinned level on the wheels).
+// Order YXZ => yaw is about WORLD up, so steering always turns you horizontally. Air control mutates the quat directly.
+function buildPlayerQuat(s) { _euler.set(s.peA, s.yawA, s.bank, "YXZ"); s.quat.setFromEuler(_euler); }
+// Point a grounded shark's nose at a world point (level heading only). Self-contained: safe at boot.
+function faceTarget(s, target) {
+  const dir = new THREE.Vector3().copy(target).sub(s.pos);
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+  s.yawA = Math.atan2(dir.x, dir.z);
+  s.peA = 0; s.bank = 0; s.wp = s.wy = s.wr = 0;
+  buildPlayerQuat(s); deriveAxes(s);
+}
+
 /* ============================================================ STATE */
 let state = "menu";          // menu | playing | goal | over
 let scores = { you: 0, bot: 0 };
@@ -465,15 +520,19 @@ const _q = new THREE.Quaternion();
 const camLook = new THREE.Vector3();
 
 function resetEntities() {
-  you.pos.set(0, 0, -CFG.AZ * 0.5); you.vel.set(0, 0, 0);
-  you.quat.identity(); deriveAxes(you);
-  you.wp = you.wy = you.wr = 0; you.speed = 0; you.boostE = 1; you.hitCD = 0;
+  // ball at the centre kickoff spot, on the ground
+  ball.pos.set(0, -CFG.AY + CFG.ballR, 0); ball.vel.set(0, 0, 0);
+
+  // RL-style kickoff: both sharks sit ON the floor, angled-off in opposite corners with the nose on the ball,
+  // so neither can shove it straight in. YOU start on your half; the bot starts FURTHER back so it can't insta-tap.
+  const groundY = -CFG.AY + CFG.sharkHitR;
+  you.pos.set(-CFG.AX * 0.5, groundY, -CFG.AZ * 0.5); you.vel.set(0, 0, 0);
+  you.grounded = true; you.speed = 0; you.boostE = 1; you.hitCD = 0;
   you.dodging = false; you.dodgeT = 0; you.jumped = false; you.jumpTimer = 0; you.jumpCD = 0;
+  faceTarget(you, ball.pos);                                         // angled approach: nose on the ball
 
-  bot.pos.set(0, 0, CFG.AZ * 0.5); bot.vel.set(0, 0, 0);
+  bot.pos.set(CFG.AX * 0.5, groundY, CFG.AZ * 0.8); bot.vel.set(0, 0, 0);
   bot.quat.identity(); bot.forward.set(0, 0, -1); bot.hitCD = 0; bot.boostE = 1;
-
-  ball.pos.set(0, -CFG.AY + CFG.ballR, 0); ball.vel.set(0, 0, 0);   // ball starts on the ground
 }
 
 function startMatch() {
@@ -561,6 +620,7 @@ function updateHud() {
   elClock.textContent = state === "demo" ? "DEMO" : (suddenDeath ? "OT" : fmtTime(Math.max(0, timeLeft)));
   elBoost.style.width = (you.boostE * 100).toFixed(0) + "%";
   if (elSpeed) elSpeed.classList.toggle("hidden", you.speed < CFG.maxSpeed * 0.99);
+  if (elMove) elMove.textContent = you.grounded ? "GROUND" : "AIR";
   if (elBoostBar) { elBoostBar.classList.toggle("empty", you.boostE <= 0.02); elBoostBar.classList.toggle("boosting", you.flame.visible); }
 }
 function fmtTime(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ":" + String(s).padStart(2, "0"); }
@@ -574,7 +634,7 @@ let kbJump = false, kbCam = false;        // one-shot edges
 let usingPad = false;
 const padPrev = {};                        // for pad button edge detection
 // live control snapshot, rebuilt every frame
-const ctrl = { yaw: 0, pitch: 0, roll: 0, throttle: 0, boost: false, drift: false, jumpEdge: false, sx: 0, sy: 0 };
+const ctrl = { sx: 0, sy: 0, throttle: 0, boost: false, powerslide: false, airRollDir: 0, jumpEdge: false };
 
 function onMove(e) {
   const nx = (e.clientX / window.innerWidth) * 2 - 1;
@@ -618,41 +678,36 @@ function pollInput() {
     if (!setPadState._set) { setPadState(pad); setPadState._set = true; }
   }
 
-  let yaw = 0, pitch = 0, roll = 0, throttle = 0, boost = false, drift = false, jumpEdge = false, sx = 0, sy = 0;
+  let sx = 0, sy = 0, throttle = 0, boost = false, powerslide = false, airRollDir = 0, jumpEdge = false;
 
   if (usingPad && pad) {
-    const lx = pad.axes[0] || 0, ly = pad.axes[1] || 0, rx = pad.axes[2] || 0;
-    sx = shape(lx); sy = -shape(ly);                 // dodge dir: up = forward
-    yaw = shape(lx);
-    const pv = shape(ly); pitch = CFG.invertPitch ? pv : -pv;
-    roll = THREE.MathUtils.clamp(shape(rx) + (bp(pad, 1) ? 1 : 0) - (bp(pad, 2) ? 1 : 0), -1.6, 1.6); // circle=R, square=L
-    throttle = bv(pad, 7) - bv(pad, 6);               // R2 - L2
-    boost = bp(pad, 5);                                // R1
-    drift = bp(pad, 4);                                // L1
-    jumpEdge = padEdge(pad, 0);                        // Cross
-    if (padEdge(pad, 3)) toggleBallCam();              // Triangle
+    const lx = pad.axes[0] || 0, ly = pad.axes[1] || 0;
+    sx = shape(lx); sy = -shape(ly);                  // left stick: X = steer/yaw/roll, Y = pitch (up = +)
+    throttle = bv(pad, 7) - bv(pad, 6);               // R2 - L2 throttle/brake
+    boost = bp(pad, 5);                               // R1 boost
+    powerslide = bp(pad, 4);                          // L1: powerslide (ground) + free air-roll (air)
+    airRollDir = (bp(pad, 1) ? 1 : 0) - (bp(pad, 2) ? 1 : 0); // Circle = air-roll right, Square = air-roll left
+    jumpEdge = padEdge(pad, 0);                       // Cross jump
+    if (padEdge(pad, 3)) toggleBallCam();             // Triangle ball-cam
   } else {
     // mouse + keyboard (mouse position acts as a virtual stick; mouseSens replaces stick sens)
     const m = CFG.mouseSens / CFG.sens;
-    yaw = shape(input.mx) * m;
-    const pv = shape(input.my) * m;
-    pitch = CFG.invertPitch ? pv : -pv;               // non-inverted: mouse up = nose up / climb
-    const kx = (keys["d"] ? 1 : 0) - (keys["a"] ? 1 : 0);
+    sx = shape(input.mx) * m; sy = -shape(input.my) * m;   // mouse: X = steer/yaw, Y = pitch (up = nose up)
+    const kx = (keys["d"] ? 1 : 0) - (keys["a"] ? 1 : 0) + (keys["arrowright"] ? 1 : 0) - (keys["arrowleft"] ? 1 : 0);
+    if (kx) sx = THREE.MathUtils.clamp(kx, -1, 1);        // A/D (or arrows) steer
     const ky = (keys["w"] || keys["arrowup"] ? 1 : 0) - (keys["s"] || keys["arrowdown"] ? 1 : 0);
-    roll = (keys["e"] ? 1 : 0) - (keys["q"] ? 1 : 0);
-    if (keys["arrowleft"]) yaw -= 0.9; if (keys["arrowright"]) yaw += 0.9;
-    throttle = ky !== 0 ? ky : CFG.autoCruise;         // auto-cruise so mouse players always move
+    throttle = ky !== 0 ? ky : CFG.autoCruise;            // auto-cruise so mouse players always roll forward
     boost = !!keys["shift"] || input.mouseDown;
-    drift = !!keys["control"] || !!keys["z"];
+    powerslide = !!keys["control"] || !!keys["z"];        // Ctrl: powerslide / free air-roll
+    airRollDir = (keys["e"] ? 1 : 0) - (keys["q"] ? 1 : 0); // E = air-roll right, Q = air-roll left
     jumpEdge = kbJump;
-    sx = kx || Math.sign(shape(input.mx)); sy = ky;    // dodge dir for kb
     if (kbCam) toggleBallCam();
   }
   kbJump = false; kbCam = false;
 
-  ctrl.yaw = yaw; ctrl.pitch = pitch; ctrl.roll = roll;
+  ctrl.sx = sx; ctrl.sy = sy;
   ctrl.throttle = THREE.MathUtils.clamp(throttle, -1, 1);
-  ctrl.boost = boost; ctrl.drift = drift; ctrl.jumpEdge = jumpEdge; ctrl.sx = sx; ctrl.sy = sy;
+  ctrl.boost = boost; ctrl.powerslide = powerslide; ctrl.airRollDir = airRollDir; ctrl.jumpEdge = jumpEdge;
 }
 function toggleBallCam() { you.ballCam = !you.ballCam; updateCamState(); }
 
@@ -686,81 +741,102 @@ function frame() {
 /* ============================================================ PLAYER FLIGHT (quaternion, RL-style) */
 function stepPlayer(dt) {
   const s = you;
+  const groundY = -CFG.AY + CFG.sharkHitR;
   s.jumpCD -= dt;
   if (s.jumpTimer > 0) s.jumpTimer -= dt;
 
-  // --- jump → double-jump / dodge-flip (two-stage, RL-style) ---
+  // --- jump → double-jump / dodge-flip. The FIRST jump must come off the floor (RL). ---
   if (ctrl.jumpEdge && !s.dodging && s.jumpCD <= 0) {
-    if (!s.jumped) {                                          // 1st press: jump, open dodge window
-      s.vel.addScaledVector(s.up, CFG.jumpImpulse).addScaledVector(s.forward, CFG.jumpFwd);
-      s.jumped = true; s.jumpTimer = CFG.dodgeWindow;
-    } else if (s.jumpTimer > 0) {                             // 2nd press within window
-      if (Math.hypot(ctrl.sx, ctrl.sy) < CFG.dodgeDead) {     // neutral -> double jump
-        s.vel.addScaledVector(s.up, CFG.doubleJumpImpulse);
+    if (s.grounded) {                                        // 1st jump: leave the ground, open the dodge window
+      s.vel.y += CFG.jumpImpulse; s.vel.addScaledVector(s.forward, CFG.jumpFwd);
+      s.grounded = false; s.jumped = true; s.jumpTimer = CFG.dodgeWindow;
+    } else if (s.jumped && s.jumpTimer > 0) {                // 2nd press in the air
+      if (Math.hypot(ctrl.sx, ctrl.sy) < CFG.dodgeDead) {    // neutral -> double jump
+        s.vel.y += CFG.doubleJumpImpulse;
         s.jumped = false; s.jumpTimer = 0; s.jumpCD = CFG.jumpCD;
-      } else {                                                // held -> directional flip
-        startDodge(s);
-        s.jumped = false; s.jumpTimer = 0;
-      }
+      } else { startDodge(s); s.jumped = false; s.jumpTimer = 0; }  // held -> directional dodge-flip
     }
   }
-  if (s.jumped && s.jumpTimer <= 0) { s.jumped = false; s.jumpCD = CFG.jumpCD; }  // window lapsed
+  if (s.jumped && s.jumpTimer <= 0) { s.jumped = false; s.jumpCD = CFG.jumpCD; }
 
+  /* ===================== ORIENTATION (ground steers, air does full aerial) ===================== */
   if (s.dodging) {
-    // spin about the world-fixed axis captured at dodge start (full 2π -> returns to orientation)
     const spin = (Math.PI * 2) / CFG.dodgeDur;
-    _q.setFromAxisAngle(s.flipAxis, s.flipSign * spin * dt);
-    s.quat.premultiply(_q);
-    s.wp = s.wy = s.wr = 0;                 // no manual rotation mid-flip
-    s.dodgeT -= dt; if (s.dodgeT <= 0) s.dodging = false;
-  } else {
-    // --- angular control: ease angular velocity toward target rates, integrate as LOCAL rotations ---
+    _q.setFromAxisAngle(s.flipAxis, s.flipSign * spin * dt); s.quat.premultiply(_q);
+    s.dodgeT -= dt;
+    if (s.dodgeT <= 0) { s.dodging = false; s.wp = s.wy = s.wr = 0; }   // keep the resulting air orientation
+  } else if (s.grounded) {
+    // GROUND ("on the wheels"): the stick only STEERS (yaw about world-up). Powerslide whips harder.
     const ke = 1 - Math.exp(-CFG.angResp * dt);
-    s.wp += (ctrl.pitch * CFG.pitchRate - s.wp) * ke;
-    s.wy += (ctrl.yaw * CFG.yawRate - s.wy) * ke;
-    s.wr += (ctrl.roll * CFG.rollRate - s.wr) * ke;
-    _q.setFromAxisAngle(LX, s.wp * dt); s.quat.multiply(_q);
-    _q.setFromAxisAngle(LY, s.wy * dt); s.quat.multiply(_q);
-    _q.setFromAxisAngle(LZ, s.wr * dt); s.quat.multiply(_q);
+    const speedF = THREE.MathUtils.clamp(s.vel.length() / (CFG.maxSpeed * 0.6), 0.3, 1);  // turn more when moving
+    const turn = -ctrl.sx * CFG.groundTurn * speedF * (ctrl.powerslide ? CFG.slideTurnMul : 1);
+    s.wy += (turn - s.wy) * ke; s.yawA += s.wy * dt; s.peA = 0;
+    const tBank = THREE.MathUtils.clamp(-ctrl.sx, -1, 1) * CFG.maxBank * 0.55;            // lean into the turn
+    s.bank += (tBank - s.bank) * ke;
+    buildPlayerQuat(s);
+  } else {
+    // AIR (RL aerial): full LOCAL-axis control. Free air-roll (powerslide held) swaps yaw->roll;
+    // directional air-roll (Square/Circle, Q/E) rolls at a constant rate while the stick still pitches/yaws.
+    const ke = 1 - Math.exp(-CFG.airResp * dt);
+    const pitchIn = (CFG.invertPitch ? ctrl.sy : -ctrl.sy);
+    let yawIn = 0, rollIn = ctrl.airRollDir;
+    if (ctrl.powerslide) rollIn += ctrl.sx;                  // free air-roll: stick X -> roll (yaw disabled)
+    else yawIn = -ctrl.sx;                                   // air-steer: stick X -> yaw
+    s.wp += (pitchIn * CFG.airPitchRate - s.wp) * ke;
+    s.wy += (yawIn   * CFG.airYawRate   - s.wy) * ke;
+    s.wr += (rollIn  * CFG.airRollRate  - s.wr) * ke;
+    _q.setFromAxisAngle(LX, s.wp * dt); s.quat.multiply(_q);  // local pitch
+    _q.setFromAxisAngle(LY, s.wy * dt); s.quat.multiply(_q);  // local yaw
+    _q.setFromAxisAngle(LZ, s.wr * dt); s.quat.multiply(_q);  // local roll
   }
   s.quat.normalize();
   deriveAxes(s);
 
-  // --- thrust ---
+  /* ===================== TRANSLATION ===================== */
   const boosting = ctrl.boost && s.boostE > 0;
-  const fwdSpeed = s.vel.dot(s.forward);
-  let aF = 0;
-  if (ctrl.throttle > 0) {
-    // RL-style accel curve: punchy at low speed, tapers to 0 as you approach max (boost ignores the cap)
-    const room = THREE.MathUtils.clamp(1 - fwdSpeed / CFG.maxSpeed, 0, 1);
-    aF += ctrl.throttle * CFG.throttleAccel * room;
-  }
-  if (boosting) aF += CFG.boostAccel;
-  if (aF) s.vel.addScaledVector(s.forward, aF * dt);
-  if (ctrl.throttle < 0) {                 // brake / reverse (L2)
-    s.vel.multiplyScalar(1 - CFG.brakeDrag * (-ctrl.throttle) * dt);
-    s.vel.addScaledVector(s.forward, ctrl.throttle * CFG.reverseAccel * dt);
-  }
-
-  // --- grip: steer velocity toward the nose (arcade). powerslide (L1) loosens it -> drift ---
-  if (!s.dodging) {
-    const speed = s.vel.length();
-    if (speed > 0.001) {
-      _tmp.copy(s.forward).multiplyScalar(speed);
-      s.vel.lerp(_tmp, 1 - Math.exp(-(ctrl.drift ? CFG.driftGrip : CFG.grip) * dt));
+  if (s.grounded) {
+    // drive along the floor: throttle accel (RL curve), boost, brake/reverse, grip (powerslide = drift)
+    s.vel.y = 0;
+    const fwdSpeed = s.vel.dot(s.forward);
+    let aF = 0;
+    if (ctrl.throttle > 0) aF += ctrl.throttle * CFG.throttleAccel * THREE.MathUtils.clamp(1 - fwdSpeed / CFG.maxSpeed, 0, 1);
+    if (boosting) aF += CFG.boostAccel;
+    if (aF) s.vel.addScaledVector(s.forward, aF * dt);
+    if (ctrl.throttle < 0) {                                 // brake / reverse (L2)
+      s.vel.multiplyScalar(1 - CFG.brakeDrag * (-ctrl.throttle) * dt);
+      s.vel.addScaledVector(s.forward, ctrl.throttle * CFG.reverseAccel * dt);
     }
+    const sp = s.vel.length();                               // grip: velocity follows the nose; powerslide loosens it
+    if (sp > 0.001) { _tmp.copy(s.forward).multiplyScalar(sp); s.vel.lerp(_tmp, 1 - Math.exp(-(ctrl.powerslide ? CFG.driftGrip : CFG.grip) * dt)); }
+    s.vel.y = 0;
+    s.vel.multiplyScalar(1 - CFG.drag * dt);
+  } else {
+    // airborne: momentum + gravity + boost-along-the-nose (no grip — orientation is everything)
+    s.vel.y -= CFG.sharkGravity * dt;
+    if (boosting) s.vel.addScaledVector(s.forward, CFG.boostAccel * dt);
+    s.vel.multiplyScalar(1 - CFG.airDrag * dt);
   }
-
-  // --- drag + speed cap ---
-  s.vel.multiplyScalar(1 - CFG.drag * dt);
   if (s.vel.length() > CFG.boostSpeed) s.vel.setLength(CFG.boostSpeed);
 
-  // --- boost energy ---
+  // boost energy + flame
   s.boostE = THREE.MathUtils.clamp(s.boostE + (boosting ? -CFG.boostDrain : CFG.boostRegen) * dt, 0, 1);
   s.flame.visible = boosting;
   if (boosting) s.flame.scale.setScalar(0.85 + 0.3 * Math.sin(swimPhase * 3));
 
   s.pos.addScaledVector(s.vel, dt);
+
+  // --- ground contact / landing: snap to the floor and re-level onto the wheels (RL suspension) ---
+  if (s.pos.y <= groundY && s.vel.y <= 0.001) {
+    s.pos.y = groundY; s.vel.y = 0;
+    if (!s.grounded) {                                       // just touched down
+      s.grounded = true; s.dodging = false; s.jumped = false; s.jumpTimer = 0;
+      deriveAxes(s);
+      s.yawA = Math.atan2(s.forward.x, s.forward.z); s.peA = 0; s.bank = 0;
+      s.wp = s.wy = s.wr = 0; buildPlayerQuat(s); deriveAxes(s);
+    }
+  } else if (s.pos.y > groundY + 0.5) {
+    s.grounded = false;
+  }
   clampToArena(s);
   s.speed = s.vel.length();
 }
@@ -932,7 +1008,8 @@ function updateCamera(dt) {
     // It flips to the front of the car when the ball crosses behind, so the ball stays in view.
     const f = _tmp.copy(ball.pos).sub(you.pos); const along = f.dot(you.forward) / (f.length() || 1);
     if (along > 0.12) you.camSide = 1; else if (along < -0.12) you.camSide = -1;   // hysteresis -> no jitter
-    _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack * you.camSide).addScaledVector(upRef, CFG.camUp);
+    // sit a bit higher + further than chase cam (and LOOK AT THE BALL) so the toggle is unmistakable
+    _v.copy(you.pos).addScaledVector(you.forward, -CFG.camBack * 1.12 * you.camSide).addScaledVector(upRef, CFG.camUp * 1.6);
     lookTgt = ball.pos;
   } else {
     // car cam: sit behind the car and look where the nose points
