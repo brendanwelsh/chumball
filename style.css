@@ -120,4 +120,3 @@ html, body {
 .finalscore { display: flex; justify-content: center; align-items: center; gap: 24px; font-size: 64px; font-weight: 900; margin: 6px 0 4px; }
 #finalYou { color: var(--blue); } #finalBot { color: var(--orange); } .finalscore .dash { opacity: .45; }
 .boot-error { margin-top: 16px; color: var(--red); font-size: 13px; line-height: 1.5; }
-.credit-inline { margin-top: 18px; font-size: 10.5px; color: rgba(127,243,255,.3); }
